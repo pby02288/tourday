@@ -47,3 +47,18 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* ✅ 숫자 input 스피너(위/아래 버튼) 제거 */
+
+/* Chrome / Safari / Edge / Opera */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+.no-spinner[type="number"] {
+  appearance: textfield;      /* ✅ 표준 속성(경고 제거용) */
+  -moz-appearance: textfield; /* ✅ Firefox용 */
+}

@@ -9,6 +9,8 @@ import PlanCard from '../components/planner/PlanCard'
 import NewPlanButton from '../components/NewPlanButton'
 
 
+
+
 type FilterType = 'all' | 'upcoming' | 'past'
 
 export default function PlannerListPage() {
