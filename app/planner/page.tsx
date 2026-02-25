@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { TravelPlan } from '../types/planner'
 import { plannerStorage } from '../lib/plannerStorage'
 import PlanCard from '../components/planner/PlanCard'
+import NewPlanButton from '../components/NewPlanButton'
+
 
 type FilterType = 'all' | 'upcoming' | 'past'
 
@@ -77,25 +79,7 @@ export default function PlannerListPage() {
               </p>
             </div>
 
-            <Link
-              href="/planner/new"
-              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all hover:scale-105 flex items-center gap-2"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              <span>새 플랜 만들기</span>
-            </Link>
+            <NewPlanButton />
           </div>
 
           {/* 검색 & 필터 */}
@@ -186,7 +170,16 @@ export default function PlannerListPage() {
                   {filter === 'upcoming' && '새로운 여행을 계획해보세요!'}
                   {filter === 'past' && '아직 완료된 여행이 없습니다'}
                 </p>
-                {filter === 'all' && (
+
+
+                {filter === 'all' && (   //새 플랜 만들기 버튼
+                <div className= "flex justify-center mt-6">
+                <NewPlanButton />
+                </div>
+                )}
+
+
+                {/*filter === 'all' && (   //새 플랜 만들기 버튼
                   <Link
                     href="/planner/new"
                     className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all hover:scale-105"
@@ -206,7 +199,7 @@ export default function PlannerListPage() {
                     </svg>
                     <span>새 플랜 만들기</span>
                   </Link>
-                )}
+                )*/}
               </>
             )}
           </div>
