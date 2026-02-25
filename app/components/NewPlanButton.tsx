@@ -31,6 +31,7 @@ export default function NewPlanButton() {
     country: '',
     startDate: '',
     endDate: '',
+    currency: "KRW",
     budget: '',
     groupMembers: [] as string[],
   })
@@ -41,8 +42,8 @@ export default function NewPlanButton() {
   // ✅ 왼쪽 Step 설명(원하면 문구만 바꿔)
   const steps = useMemo(
     () => [
-      { id: 1 as const, title: 'Step 1', label: '기본정보', desc: '어디로 떠날지 정해요' }, // 여행지 이름, 국가, 위치, 예산까지 입력
-      { id: 2 as const, title: 'Step 2', label: '날짜, 이동', desc: '출발/도착일과 이동수단을 정해요' }, // 친구리스트 ㅇㅋ + 건너뛰기
+      { id: 1 as const, title: 'Step 1', label: '기본정보', desc: '여행 준비를 시작해요' }, // 여행지 이름, 국가, 위치, 예산까지 입력
+      { id: 2 as const, title: 'Step 2', label: '날짜, 이동수단', desc: '출발/도착일과 이동수단을 정해요' }, // 친구리스트 ㅇㅋ + 건너뛰기
       { id: 3 as const, title: 'Step 3', label: '친구 추가', desc: '함께 떠날 친구를 추가해요' }, // 이건 입력한 정보들 정리해서 보여주기
       { id: 4 as const, title: 'Step 4', label: '목적지', desc: '가고싶은 곳을 추가해요' }, // 여행지 설정하기 + 건너뛰기 + 추천 여행코스 + 추천 여행지
       { id: 5 as const, title: 'Step 5', label: '체크리스트', desc: '여행 전 준비사항을 체크해요' }, // 체크리스트 추가하기 + 건너뛰기 + 이건 나중에 추천 상품 ㅎㅎ
@@ -85,6 +86,7 @@ export default function NewPlanButton() {
       country: '',
       startDate: '',
       endDate: '',
+      currency: "KRW",
       budget: '',
       groupMembers: [],
     })
@@ -152,6 +154,27 @@ export default function NewPlanButton() {
     const line2 = t.slice(5, 10)
     return [line1, line2].filter(Boolean)
   }
+
+  // =========================
+  // ✅ 통화리스트
+  // =========================
+
+  const CURRENCY_OPTIONS = [
+    { code: "KRW", label: "KRW" },
+    { code: "JPY", label: "JPY" },
+    { code: "CNY", label: "CNY" },
+    { code: "USD", label: "USD" },
+    { code: "EUR", label: "EUR" },
+  ] as const
+
+  const CURRENCY_DISPLAY: Record<string, { suffix: string; fractionDigits: number }> = {
+  KRW: { suffix: " 원", fractionDigits: 0 },
+  JPY: { suffix: " 엔", fractionDigits: 0 },
+  CNY: { suffix: " 위안", fractionDigits: 0 },
+  USD: { suffix: " 달러", fractionDigits: 2 },
+  EUR: { suffix: " 유로", fractionDigits: 2 },
+  }
+
 
   // =========================
   // ✅ Step 이동(네 코드 버튼 로직과 동일한 기준)
@@ -307,17 +330,18 @@ export default function NewPlanButton() {
                   {/* Step 1: 목적지 */}
                   {step === 1 && (
                     <div className="space-y-6">
+
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          📍 어디로 가시나요?
+                          ✏️ 여행 제목
                         </label>
                         <input
                           type="text"
-                          value={formData.destination}
+                          value={formData.title}
                           onChange={(e) =>
-                            setFormData({ ...formData, destination: e.target.value })
+                            setFormData({ ...formData, title: e.target.value })
                           }
-                          placeholder="예) 도쿄, 파리, 제주도"
+                          placeholder="예) 도쿄 벚꽃 여행, 파리 로맨틱 투어"
                           className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
                           autoFocus
                         />
@@ -325,18 +349,93 @@ export default function NewPlanButton() {
 
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          🌏 국가
+                          📍 어디로 가시나요?
                         </label>
-                        <input
-                          type="text"
-                          value={formData.country}
-                          onChange={(e) =>
-                            setFormData({ ...formData, country: e.target.value })
-                          }
-                          placeholder="예) 일본, 프랑스, 대한민국"
-                          className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
-                        />
+
+                        {/* ✅ 반응형: 모바일은 1열로 쌓이고(md 미만), md 이상부터 2열 */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* ✅ 왼쪽: 국가 */}
+                          <div>
+                            <input
+                              type="text"
+                              value={formData.country}
+                              onChange={(e) =>
+                                setFormData({ ...formData, country: e.target.value })
+                              }
+                              placeholder="국가 (예: 일본, 프랑스, 대한민국)"
+                              className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
+                            />
+                          </div>
+
+                          {/* ✅ 오른쪽: 지역(도시/지역명) */}
+                          <div>
+                            <input
+                              type="text"
+                              value={formData.destination}
+                              onChange={(e) =>
+                                setFormData({ ...formData, destination: e.target.value })
+                              }
+                              placeholder="지역 (예: 도쿄, 파리, 제주도)"
+                              className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+
                       </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          💰 예산
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                        {/* ✅ 통화 선택 (왼쪽 1/5) */}
+                        <select
+                          value={formData.currency}
+                          onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                          className="sm:col-span-1 w-full px-3 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg bg-white"
+                        >
+                          {CURRENCY_OPTIONS.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </select>
+                          <input
+                            type="number"
+                            value={formData.budget}
+                            onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                            placeholder="예) 1000000"
+                            className="sm:col-span-4 w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
+                            min={0}
+                          />
+                        </div>
+                      </div>
+
+                      {formData.budget && (
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                          <p className="text-green-700 font-semibold">
+                            {/*
+                              ✅ currency에 따라 접미사/소수점 자리수 변경
+                              - 없으면(맵에 없는 통화) 접미사는 통화 코드 그대로 보여줌(예: "THB")
+                            */}
+                            {(() => {
+                              const meta = CURRENCY_DISPLAY[formData.currency]
+                              const suffix = meta?.suffix ?? formData.currency
+                              const digits = meta?.fractionDigits ?? 0
+
+                              const amount = Number(formData.budget)
+                              const formatted = amount.toLocaleString(undefined, {
+                                minimumFractionDigits: digits,
+                                maximumFractionDigits: digits,
+                              })
+
+                              return `예산 : ${formatted}${suffix}`
+                            })()}
+                          </p>
+                        </div>
+                      )}
+
+
                     </div>
                   )}
 
@@ -461,44 +560,9 @@ export default function NewPlanButton() {
                   {/* Step 4: 제목 & 예산 */}
                   {step === 4 && (
                     <div className="space-y-6">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          ✏️ 여행 제목
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.title}
-                          onChange={(e) =>
-                            setFormData({ ...formData, title: e.target.value })
-                          }
-                          placeholder="예) 도쿄 벚꽃 여행, 파리 로맨틱 투어"
-                          className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
-                          autoFocus
-                        />
-                      </div>
 
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          💰 예산 (원)
-                        </label>
-                        <input
-                          type="number"
-                          value={formData.budget}
-                          onChange={(e) =>
-                            setFormData({ ...formData, budget: e.target.value })
-                          }
-                          placeholder="1000000"
-                          className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
-                        />
-                      </div>
 
-                      {formData.budget && (
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-                          <p className="text-green-700 font-semibold">
-                            예산: {Number(formData.budget).toLocaleString()}원
-                          </p>
-                        </div>
-                      )}
+
                     </div>
                   )}
 
