@@ -11,6 +11,23 @@ interface ChecklistItem {
 
 interface ChecklistProps {
   planId: string
+  // ✅ (선택) 부모에게 변경 알림 (NewPlanButton Step5에서 사용)
+  onChange?: (items: ChecklistItem[]) => void
+
+  // ✅ UI 옵션: 기본값은 기존 화면 그대로
+  showProgress?: boolean     // 상단 카운트/진행바/%/완료축하
+  showCheckboxes?: boolean   // 왼쪽 체크박스 컬럼
+
+  // ✅ 추가: 헤더 우측 카운트 표기 방식
+  // - 'checkedTotal' : 3/12 (기존과 동일)
+  // - 'total'        : 총 12개
+  // - 'none'         : 표시 안 함
+  headerCountMode?: 'checkedTotal' | 'total' | 'none'
+
+    // ✅ 추가: 카테고리 오른쪽 카운트 표시 방식
+  categoryCountMode?: 'checkedTotal' | 'total' | 'none'
+
+  listMaxHeightClass?: string
 }
 
 // 기본 체크리스트 템플릿
@@ -29,7 +46,7 @@ const DEFAULT_ITEMS: Omit<ChecklistItem, 'id'>[] = [
   { text: '상비약', checked: false, category: '짐 싸기' },
 ]
 
-export default function Checklist({ planId }: ChecklistProps) {
+export default function Checklist({ planId, onChange, showProgress = true, showCheckboxes = true, headerCountMode = 'checkedTotal', categoryCountMode = 'checkedTotal', listMaxHeightClass = 'max-h-[500px]', }: ChecklistProps) {
   const [items, setItems] = useState<ChecklistItem[]>(() => {
     // 로컬스토리지에서 불러오기
     if (typeof window !== 'undefined') {
@@ -52,8 +69,15 @@ export default function Checklist({ planId }: ChecklistProps) {
   // 저장
   const saveItems = (newItems: ChecklistItem[]) => {
     setItems(newItems)
-    localStorage.setItem(`checklist_${planId}`, JSON.stringify(newItems))
+    // ✅ 안전하게 window 체크(클라이언트 컴포넌트지만 방어적으로)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`checklist_${planId}`, JSON.stringify(newItems))
+    }
+
+    // ✅ 부모에게 “체크리스트 상태 변경됨” 알림
+    onChange?.(newItems)
   }
+
 
   // 체크 토글
   const toggleItem = (id: string) => {
@@ -109,26 +133,33 @@ export default function Checklist({ planId }: ChecklistProps) {
           <span>✅</span>
           <span>체크리스트</span>
         </h3>
-        <span className="text-sm font-semibold text-blue-600">
-          {checkedItems}/{totalItems}
-        </span>
+        {headerCountMode !== 'none' && (
+          <span className="text-sm font-semibold text-blue-600">
+            {headerCountMode === 'total'
+              ? `총 ${totalItems}개`
+              : `${checkedItems}/${totalItems}`}
+          </span>
+        )}
       </div>
 
       {/* 진행 바 */}
-      <div className="mb-6">
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-green-400 to-blue-500 transition-all duration-500 rounded-full"
-            style={{ width: `${progress}%` }}
-          />
+      {showProgress && (
+        <div className="mb-6">
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-green-400 to-blue-500 transition-all duration-500 rounded-full"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="text-xs text-gray-500 mt-1 text-right">
+            {Math.round(progress)}% 완료
+          </div>
         </div>
-        <div className="text-xs text-gray-500 mt-1 text-right">
-          {Math.round(progress)}% 완료
-        </div>
-      </div>
+      )}
+
 
       {/* 카테고리별 리스트 */}
-      <div className="space-y-4 max-h-[500px] overflow-y-auto">
+      <div className={`space-y-4 ${listMaxHeightClass} overflow-y-auto`}>
         {categories.map((category) => {
           const categoryItems = groupedItems[category]
           const categoryChecked = categoryItems.filter(
@@ -141,9 +172,13 @@ export default function Checklist({ planId }: ChecklistProps) {
               {/* 카테고리 헤더 */}
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-sm font-bold text-gray-700">{category}</h4>
-                <span className="text-xs text-gray-400">
-                  {categoryChecked}/{categoryTotal}
-                </span>
+                {categoryCountMode !== 'none' && (
+                  <span className="text-xs text-gray-400">
+                    {categoryCountMode === 'total'
+                      ? `${categoryTotal} 개`
+                      : `${categoryChecked}/${categoryTotal}`}
+                  </span>
+                )}
               </div>
 
               {/* 항목들 */}
@@ -151,44 +186,38 @@ export default function Checklist({ planId }: ChecklistProps) {
                 {categoryItems.map((item) => (
                   <div
                     key={item.id}
-                    className="group flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition"
+                    className={[
+                      'group flex items-center p-2 rounded-lg hover:bg-gray-50 transition',
+                      showCheckboxes ? 'gap-3' : 'justify-center', // ✅ 체크박스 없으면 가운데 정렬
+                    ].join(' ')}
                   >
                     {/* 체크박스 */}
-                    <button
-                      onClick={() => toggleItem(item.id)}
-                      className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                        item.checked
-                          ? 'bg-blue-500 border-blue-500'
-                          : 'border-gray-300 hover:border-blue-400'
-                      }`}
-                    >
-                      {item.checked && (
-                        <svg
-                          className="w-3 h-3 text-white"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+                      {showCheckboxes && (
+                        <button
+                          onClick={() => toggleItem(item.id)}
+                          className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                            item.checked ? 'bg-blue-500 border-blue-500' : 'border-gray-300 hover:border-blue-400'
+                          }`}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={3}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
+                          {item.checked && (
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
                       )}
-                    </button>
 
                     {/* 텍스트 */}
-                    <span
-                      className={`flex-1 text-sm transition-all ${
-                        item.checked
-                          ? 'text-gray-400 line-through'
-                          : 'text-gray-700'
-                      }`}
-                    >
-                      {item.text}
-                    </span>
+                      <span
+                        className={[
+                          'flex-1 text-sm transition-all',
+                          showCheckboxes
+                            ? (item.checked ? 'text-gray-400 line-through' : 'text-gray-700')
+                            : 'text-gray-700 text-center',
+                        ].join(' ')}
+                      >
+                        {item.text}
+                      </span>
 
                     {/* 삭제 버튼 */}
                     <button
@@ -282,14 +311,12 @@ export default function Checklist({ planId }: ChecklistProps) {
       )}
 
       {/* 완료 축하 메시지 */}
-      {progress === 100 && totalItems > 0 && (
-        <div className="mt-4 p-3 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl text-center">
-          <div className="text-2xl mb-1">🎉</div>
-          <p className="text-sm font-semibold text-green-700">
-            모든 준비 완료!
-          </p>
-        </div>
-      )}
+        {showProgress && progress === 100 && totalItems > 0 && (
+          <div className="mt-4 p-3 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl text-center">
+            <div className="text-2xl mb-1">🎉</div>
+            <p className="text-sm font-semibold text-green-700">모든 준비 완료!</p>
+          </div>
+        )}
     </div>
   )
 }
