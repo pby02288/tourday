@@ -8,10 +8,11 @@
  * - 마지막 Step에서 “플랜 만들기” 누르면 localStorage 저장 후 상세 페이지로 이동
  */
 
-import { useEffect, useMemo, useState, type FormEvent, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, useRef, type CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { TravelPlan, DayPlan } from '../types/planner'
 import { plannerStorage, calculateDays } from '../lib/plannerStorage'
+import Checklist from './planner/Checklist'
 
 // 달력용
 import { DayPicker } from 'react-day-picker'
@@ -21,6 +22,35 @@ import { ko } from "date-fns/locale"
 import { format } from "date-fns"
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6
+
+// ✅ Step 4 카드에 공통으로 쓸 임시 이미지(1개)
+// - SVG를 data URI로 만들어서 "파일 추가" 없이 바로 사용 가능
+const PLACEHOLDER_RECOMMEND_IMAGE = (() => {
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#60a5fa"/>
+        <stop offset="1" stop-color="#a78bfa"/>
+      </linearGradient>
+      <linearGradient id="h" x1="0" y1="1" x2="1" y2="0">
+        <stop offset="0" stop-color="#0ea5e9" stop-opacity="0.35"/>
+        <stop offset="1" stop-color="#22c55e" stop-opacity="0.25"/>
+      </linearGradient>
+    </defs>
+    <rect width="800" height="520" rx="36" fill="url(#g)"/>
+    <circle cx="640" cy="120" r="95" fill="white" opacity="0.18"/>
+    <circle cx="680" cy="150" r="62" fill="white" opacity="0.14"/>
+    <path d="M0 400 C 120 340, 240 460, 360 400 C 480 340, 600 460, 800 395 L 800 520 L 0 520 Z"
+          fill="url(#h)"/>
+    <path d="M60 430 C 140 380, 220 500, 300 440" stroke="white" stroke-width="10" opacity="0.18" fill="none"/>
+    <path d="M360 450 C 460 390, 540 520, 640 455" stroke="white" stroke-width="10" opacity="0.18" fill="none"/>
+  </svg>
+  `.trim()
+
+  // ✅ data:image/svg+xml URI로 변환 (공백/특수문자 안전)
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+})()
 
 export default function NewPlanButton() {
   const router = useRouter()
@@ -95,6 +125,10 @@ export default function NewPlanButton() {
     setOpen(false)
     setStep(1)
     setRange(undefined)
+    // ✅ draft 체크리스트 localStorage 정리
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(`checklist_${draftChecklistId}`)
+    }
     setFormData({
       title: '',
       destination: '',
@@ -109,6 +143,8 @@ export default function NewPlanButton() {
       step6 : '',
     })
     setMemberQuery('')
+    setRecTab('travel')
+    setRecSelected({ travel: [], food: [], sights: [] })
   }
 
   // =========================
@@ -131,6 +167,24 @@ export default function NewPlanButton() {
       groupMembers: prev.groupMembers.filter((m) => m !== name),
     }))
   }
+
+  // ✅ input 포커스 유지용
+const memberInputRef = useRef<HTMLInputElement | null>(null)
+
+// ✅ 입력값 있으면 버튼 활성
+const canAddMember = memberQuery.trim().length > 0
+
+// ✅ Enter/버튼 공용: 멤버 추가
+const handleAddMember = () => {
+  const trimmed = memberQuery.trim()
+  if (!trimmed) return
+
+  addGroupMember(trimmed)
+  setMemberQuery('')
+
+  // ✅ 추가 후에도 바로 계속 입력 가능하게 포커스 복구
+  requestAnimationFrame(() => memberInputRef.current?.focus())
+}
 
   const MEMBER_PALETTES = [
     { from: '#7C3AED', to: '#A855F7' }, // 보라
@@ -159,6 +213,8 @@ export default function NewPlanButton() {
 
   const cleanMemberText = (name: string) => name.trim().replace(/\s+/g, '')
 
+
+
   // 모바일(작을 때): 최대 3글자(+…)
   const memberLabelSmall = (name: string) => {
     const t = cleanMemberText(name)
@@ -172,6 +228,67 @@ export default function NewPlanButton() {
     const line2 = t.slice(5, 10)
     return [line1, line2].filter(Boolean)
   }
+
+  // =========================
+  // ✅ Step 4: 추천 리스트(탭 + 선택)
+  // =========================
+  const RECOMMEND_TABS = [
+    { id: 'travel', label: '여행지' },
+    { id: 'food', label: '맛집' },
+    { id: 'sights', label: '볼거리' },
+  ] as const
+
+  type RecommendTab = (typeof RECOMMEND_TABS)[number]['id']
+
+  const [recTab, setRecTab] = useState<RecommendTab>('travel')
+
+  // 탭별 선택(여러 개 선택 가능, 클릭하면 토글)
+  const [recSelected, setRecSelected] = useState<Record<RecommendTab, string[]>>({
+    travel: [],
+    food: [],
+    sights: [],
+  })
+
+  // ✅ 더미 12개 데이터(나중에 엑셀에서 불러온 데이터로 교체)
+  const recommendItems = useMemo(() => {
+    // 여행지명 기반으로 임시 타이틀 생성(없으면 "추천")
+    const base = formData.destination?.trim() || '추천'
+
+    const make = (prefix: string, tab: RecommendTab) =>
+      Array.from({ length: 12 }, (_, i) => {
+        const n = String(i + 1).padStart(2, '0')
+        return {
+          id: `${tab}-${n}`,
+          title: `${base} ${prefix} ${n}`,
+          image: PLACEHOLDER_RECOMMEND_IMAGE, // ✅ 전부 동일 이미지(임시)
+        }
+      })
+
+    return {
+      travel: make('여행지', 'travel'),
+      food: make('맛집', 'food'),
+      sights: make('볼거리', 'sights'),
+    } satisfies Record<RecommendTab, { id: string; title: string; image: string }[]>
+  }, [formData.destination])
+
+  // ✅ 선택된 게 하나라도 있으면 formData.step4에 저장(건너뛰기/다음 버튼 로직 연동용)
+  useEffect(() => {
+    const total =
+      recSelected.travel.length + recSelected.food.length + recSelected.sights.length
+
+    setFormData((prev) => ({
+      ...prev,
+      // 나중에 엑셀로 바뀌어도 구조 유지 가능하도록 JSON으로 저장
+      step4: total > 0 ? JSON.stringify(recSelected) : '',
+    }))
+  }, [recSelected])
+
+
+  // =========================
+  // ✅ 체크리스트
+  // =========================
+  const draftChecklistId = useMemo(() => `draft_${Date.now()}`, [])
+
 
   // =========================
   // ✅ 통화리스트
@@ -242,6 +359,18 @@ export default function NewPlanButton() {
       days,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+    }
+    
+    // ✅ Step 5에서 만든 체크리스트(draft)를 실제 플랜 id로 이관
+    if (typeof window !== 'undefined') {
+      const draftKey = `checklist_${draftChecklistId}`
+      const realKey = `checklist_${newPlan.id}`
+
+      const draft = localStorage.getItem(draftKey)
+      if (draft) {
+        localStorage.setItem(realKey, draft)
+        localStorage.removeItem(draftKey)
+      }
     }
 
     plannerStorage.savePlan(newPlan)
@@ -584,7 +713,7 @@ export default function NewPlanButton() {
                                 {/* ✅ hover 시 가운데 '-' 표시 */}
                                 <span
                                   className="pointer-events-none absolute inset-0 flex items-center justify-center
-                                            text-white font-black text-2xl opacity-0 group-hover:opacity-100 transition-opacity drop-shadow"
+                                            text-white font-black text-3xl opacity-0 group-hover:opacity-100 transition-opacity drop-shadow"
                                 >
                                  &minus; 
                                 </span>
@@ -625,44 +754,174 @@ export default function NewPlanButton() {
                           </div>
                         )}
 
-                        <input
-                          type="text"
-                          value={memberQuery}
-                          onChange={(e) => setMemberQuery(e.target.value)}
-                          onKeyDown={(e) => {
-                            // 한글 입력 조합 중 Enter 방지
-                            if ((e.nativeEvent as any).isComposing) return
+                        <div className="flex items-center gap-3">
+                          {/* ✅ 입력바 (4/5) */}
+                          <input
+                            ref={memberInputRef}
+                            type="text"
+                            value={memberQuery}
+                            onChange={(e) => setMemberQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                              // ✅ 한글 IME 조합 중 Enter는 건드리지 않기
+                              if ((e.nativeEvent as any).isComposing) return
 
-                            if (e.key === 'Enter' || e.key === ',') {
-                              e.preventDefault()
-                              addGroupMember(memberQuery)
-                              setMemberQuery('')
-                            }
+                              // ✅ Enter / , 로 추가 (기능 다시 살림)
+                              if (e.key === 'Enter' || e.key === ',') {
+                                e.preventDefault()
+                                if (canAddMember) handleAddMember() // 비었으면 그냥 무시(폼 submit도 방지)
+                                return
+                              }
+                            }}
+                            placeholder="이름 혹은 아이디로 추가"
+                            className="flex-[4] px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
+                            autoFocus
+                          />
 
-                            // 입력 비었을 때 Backspace로 마지막 멤버 삭제(원치 않으면 이 블록 삭제)
-                            if (e.key === 'Backspace' && memberQuery === '') {
-                              setFormData((prev) => ({
-                                ...prev,
-                                groupMembers: prev.groupMembers.slice(0, -1),
-                              }))
+                          {/* ✅ 추가 버튼 (1/5) */}
+                          <button
+                            type="button"
+                            onClick={handleAddMember}
+                            disabled={!canAddMember}
+                            className={
+                              canAddMember
+                                ? 'flex-[1] min-w-[88px] px-4 py-3.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg active:scale-[0.98] transition'
+                                : 'flex-[1] min-w-[88px] px-4 py-3.5 bg-gray-200 text-gray-400 rounded-xl font-semibold cursor-not-allowed'
                             }
-                          }}
-                          placeholder="이름 혹은 아이디로 추가"
-                          className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition text-lg"
-                          autoFocus
-                        />
+                          >
+                            추가
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Step 4: 제목 & 예산 */}
+                  {/* Step 4: 추천 여행지 */}
                   {step === 4 && (
-                    <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-12 gap-4">
 
+                        {/* ✅ 오른쪽: 탭 + 스크롤 카드 */}
+                        <div className="col-span-12 md:col-span-12">
+                          {/* 탭 */}
+                          <div className="flex justify-center mb-3">
+                            <div className="grid grid-cols-3 gap-2">
+                              {RECOMMEND_TABS.map((t) => {
+                                const active = recTab === t.id
+                                return (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => setRecTab(t.id)}
+                                    className={
+                                      active
+                                        ? 'px-6 py-2.5 rounded-xl font-bold text-white bg-blue-600 shadow'
+                                        : 'px-6 py-2.5 rounded-xl font-bold text-white bg-blue-400 hover:bg-blue-500 transition'
+                                    }
+                                  >
+                                    {t.label}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
 
+                          {/* 스크롤 영역 */}
+                          <div className="h-[420px] overflow-y-auto pr-1">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                              {recommendItems[recTab].map((item) => {
+                                const selected = recSelected[recTab].includes(item.id)
+
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => {
+                                      // ✅ 클릭하면 선택/해제 토글
+                                      setRecSelected((prev) => {
+                                        const cur = prev[recTab]
+                                        const nextTab = cur.includes(item.id)
+                                          ? cur.filter((x) => x !== item.id)
+                                          : [...cur, item.id]
+                                        return { ...prev, [recTab]: nextTab }
+                                      })
+                                    }}
+                                    className={[
+                                      // 카드 외형(슬롯 느낌)
+                                      'rounded-2xl border-2 bg-white overflow-hidden transition',
+                                      'hover:shadow-md active:scale-[0.99]',
+                                      selected
+                                        ? 'border-green-500 shadow-[0_0_0_2px_rgba(34,197,94,0.15)]'
+                                        : 'border-gray-200 hover:border-gray-300',
+                                    ].join(' ')}
+                                  >
+                                    {/* ✅ 이미지 영역 */}
+                                    <div className="relative h-28 w-full">
+                                      {/* 배경 이미지 */}
+                                      <div
+                                        className="absolute inset-0 bg-cover bg-center"
+                                        style={{ backgroundImage: `url(${item.image})` }}
+                                      />
+                                      {/* 이미지 어둡게(오버레이) */}
+                                      <div className="absolute inset-0 bg-black/45" />
+
+                                      {/* 선택 상태면 초록빛 살짝 */}
+                                      {selected && <div className="absolute inset-0 bg-green-500/15" />}
+
+                                      {/* 타이틀(흰색) */}
+                                      <div className="absolute inset-0 flex items-center justify-center px-3 text-center">
+                                        <div className="text-white font-extrabold text-base leading-tight drop-shadow">
+                                          {item.title}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* ✅ 하단 “선택” 영역 */}
+                                    <div className="py-2 flex items-center justify-center">
+                                      <span
+                                        className={[
+                                          'text-xs font-semibold px-3 py-1 rounded-full',
+                                          selected ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500',
+                                        ].join(' ')}
+                                      >
+                                        {selected ? '선택됨' : '선택'}
+                                      </span>
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          {/* 선택 개수(옵션 표시) */}
+                          <div className="mt-2 text-center text-xs text-gray-500">
+                            선택: {recSelected.travel.length + recSelected.food.length + recSelected.sights.length}개
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
+
+                    {/* Step 5: 추천 체크리스트 */}
+                    {step === 5 && (
+                      <div className="space-y-4">
+                        <Checklist
+                          planId={draftChecklistId}
+                          showProgress={false}           // ✅ 퍼센트/진행률/완료메시지 숨김
+                          showCheckboxes={false}         // ✅ 왼쪽 체크박스 숨김
+                          headerCountMode="total"       // ✅ 총 표시
+                          categoryCountMode="total"   // ✅ 카테고리 총 표시
+                          listMaxHeightClass="max-h-[360px]"
+                          onChange={(items) => {
+                            // ✅ 뭔가라도 수정/체크/추가/삭제가 일어나면 step5 채워서
+                            // 버튼이 "건너뛰기" → "다음" 스타일로 바뀌게 만들기 :contentReference[oaicite:7]{index=7}
+                            setFormData((prev) => ({ ...prev, step5: JSON.stringify(items) }))
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
+
+
 
                   {/* 하단 버튼(네 코드 흐름 유지) */}
                     <div className="mt-auto flex items-center justify-end pt-4">
