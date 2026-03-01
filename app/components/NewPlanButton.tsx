@@ -14,6 +14,8 @@ import { TravelPlan, DayPlan } from '../types/planner'
 import { plannerStorage, calculateDays } from '../lib/plannerStorage'
 import Checklist from './planner/Checklist'
 
+//test
+
 // 달력용
 import { DayPicker } from 'react-day-picker'
 import type { DateRange } from 'react-day-picker'
